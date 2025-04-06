@@ -1,0 +1,94 @@
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+
+const userSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true,
+        trim: true
+    },
+    email: {
+        type: String,
+        required: true,
+        unique: true,
+        trim: true,
+        lowercase: true
+    },
+    password: {
+        type: String,
+        required: true
+    },
+    phone: {
+        type: String,
+        required: true,
+        unique: true
+    },
+    role: {
+        type: String,
+        enum: ['MCP', 'PICKUP_PARTNER'],
+        required: true
+    },
+    status: {
+        type: String,
+        enum: ['ACTIVE', 'INACTIVE', 'SUSPENDED'],
+        default: 'ACTIVE'
+    },
+    mcpId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: function() {
+            return this.role === 'PICKUP_PARTNER';
+        }
+    },
+    commissionRate: {
+        type: Number,
+        required: function() {
+            return this.role === 'PICKUP_PARTNER';
+        },
+        default: 0
+    },
+    location: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point'
+        },
+        coordinates: {
+            type: [Number],
+            default: [0, 0]
+        }
+    },
+    deviceToken: String,
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    updatedAt: {
+        type: Date,
+        default: Date.now
+    }
+});
+
+// Index for geospatial queries
+userSchema.index({ location: '2dsphere' });
+
+// Hash password before saving
+userSchema.pre('save', async function(next) {
+    if (!this.isModified('password')) return next();
+    
+    try {
+        const salt = await bcrypt.genSalt(10);
+        this.password = await bcrypt.hash(this.password, salt);
+        next();
+    } catch (error) {
+        next(error);
+    }
+});
+
+// Method to compare password
+userSchema.methods.comparePassword = async function(candidatePassword) {
+    return bcrypt.compare(candidatePassword, this.password);
+};
+
+const User = mongoose.model('User', userSchema);
+module.exports = User;
