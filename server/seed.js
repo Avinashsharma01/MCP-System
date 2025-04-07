@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('./models/User');
 const Wallet = require('./models/Wallet');
+const Order = require('./models/Order');
 
 // Connect to MongoDB
 async function connectDB() {
@@ -21,6 +22,7 @@ async function cleanDB() {
   console.log('Cleaning database...');
   await User.deleteMany({});
   await Wallet.deleteMany({});
+  await Order.deleteMany({});
   console.log('Database cleaned');
 }
 
@@ -71,6 +73,95 @@ async function seedDatabase() {
       balance: 0
     });
     await partnerWallet.save();
+
+    // Create a test customer
+    const customerPassword = await bcrypt.hash('password123', 10);
+    const customer = new User({
+      name: 'Test Customer',
+      email: 'customer@example.com',
+      password: customerPassword,
+      phone: '5555555555',
+      role: 'CUSTOMER',
+      status: 'ACTIVE'
+    });
+    
+    await customer.save();
+    console.log('Created Customer user:', customer._id);
+
+    // Create dummy orders
+    const orders = [
+      {
+        mcpId: mcp._id,
+        customerId: customer._id,
+        pickupPartnerId: partner._id,
+        status: 'COMPLETED',
+        pickupLocation: {
+          type: 'Point',
+          coordinates: [77.5946, 12.9716], // Bangalore coordinates
+          address: {
+            street: '123 MG Road',
+            city: 'Bangalore',
+            state: 'Karnataka',
+            pincode: '560001',
+            landmark: 'Near Metro Station'
+          }
+        },
+        amount: 500,
+        commission: 50,
+        scheduledTime: new Date(Date.now() - 86400000), // Yesterday
+        completedTime: new Date(Date.now() - 82800000), // Yesterday + 10 hours
+        customerNotes: 'Please handle with care',
+        paymentStatus: 'COMPLETED'
+      },
+      {
+        mcpId: mcp._id,
+        customerId: customer._id,
+        status: 'PENDING',
+        pickupLocation: {
+          type: 'Point',
+          coordinates: [77.5946, 12.9716],
+          address: {
+            street: '456 Brigade Road',
+            city: 'Bangalore',
+            state: 'Karnataka',
+            pincode: '560001',
+            landmark: 'Near UB City'
+          }
+        },
+        amount: 750,
+        commission: 75,
+        scheduledTime: new Date(Date.now() + 86400000), // Tomorrow
+        customerNotes: 'Urgent delivery required'
+      },
+      {
+        mcpId: mcp._id,
+        customerId: customer._id,
+        pickupPartnerId: partner._id,
+        status: 'IN_PROGRESS',
+        pickupLocation: {
+          type: 'Point',
+          coordinates: [77.5946, 12.9716],
+          address: {
+            street: '789 Church Street',
+            city: 'Bangalore',
+            state: 'Karnataka',
+            pincode: '560001',
+            landmark: 'Near UB City'
+          }
+        },
+        amount: 1000,
+        commission: 100,
+        scheduledTime: new Date(),
+        customerNotes: 'Fragile items'
+      }
+    ];
+
+    // Save all orders
+    for (const orderData of orders) {
+      const order = new Order(orderData);
+      await order.save();
+      console.log('Created order:', order._id);
+    }
     
     // Generate tokens for testing
     const mcpToken = jwt.sign(
@@ -95,6 +186,10 @@ async function seedDatabase() {
     console.log('Email: partner@example.com');
     console.log('Password: password123');
     console.log('Token:', partnerToken);
+    
+    console.log('\nCustomer User:');
+    console.log('Email: customer@example.com');
+    console.log('Password: password123');
     
     console.log('\nDatabase seeded successfully!');
     

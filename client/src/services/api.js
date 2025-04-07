@@ -1,14 +1,16 @@
 import axios from 'axios';
 import { toast } from 'react-hot-toast';
 
-const API_URL = 'http://localhost:4000/api';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
 // Create axios instance with baseURL
 const api = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
-  }
+  },
+  // Add timeout
+  timeout: 10000,
 });
 
 // Add request interceptor for adding auth token
@@ -107,17 +109,47 @@ export const partnerService = {
 
 // Wallet services
 export const walletService = {
-  // Get wallet details
-  getWallet: () => api.get('/wallet'),
-  
-  // Get wallet transactions
-  getTransactions: () => api.get('/wallet/transactions'),
-  
-  // Add money to wallet
-  addMoney: (amount) => api.post('/wallet/deposit', { amount }),
-  
-  // Withdraw money from wallet
-  withdraw: (amount) => api.post('/wallet/withdraw', { amount }),
+  getWallet: async () => {
+    try {
+      const response = await api.get('/wallet');
+      return response;
+    } catch (error) {
+      console.error('Error fetching wallet:', error);
+      throw error;
+    }
+  },
+
+  getTransactions: async (filters = {}) => {
+    try {
+      const response = await api.get('/wallet/transactions', {
+        params: filters
+      });
+      return response;
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      throw error;
+    }
+  },
+
+  addFunds: async (data) => {
+    try {
+      const response = await api.post('/wallet/add-funds', data);
+      return response;
+    } catch (error) {
+      console.error('Error adding funds:', error);
+      throw error;
+    }
+  },
+
+  withdrawFunds: async (data) => {
+    try {
+      const response = await api.post('/wallet/withdraw', data);
+      return response;
+    } catch (error) {
+      console.error('Error withdrawing funds:', error);
+      throw error;
+    }
+  }
 };
 
 // Pickup services

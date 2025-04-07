@@ -129,6 +129,20 @@ const Home = () => {
                 </div>
               </div>
             </a>
+            <Link
+              to="/orders"
+              className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-50"
+            >
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-red-100 rounded-full">
+                  <FiPackage className="h-6 w-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold">Overview</h3>
+                  <p className="text-gray-600">Track and manage orders</p>
+                </div>
+              </div>
+            </Link>
           </div>
         </div>
       )}

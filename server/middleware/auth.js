@@ -52,7 +52,11 @@ exports.verifyToken = async (req, res, next) => {
             }
 
             console.log('Authentication successful for user:', user.name);
-            req.user = decoded;
+            // Add user role to the request object
+            req.user = {
+                ...decoded,
+                role: user.role
+            };
             next();
         } catch (jwtError) {
             console.error('JWT verification error:', jwtError);

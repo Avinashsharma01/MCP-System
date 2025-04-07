@@ -73,21 +73,48 @@ walletSchema.index({ 'transactions.createdAt': -1 });
 
 // Method to add transaction
 walletSchema.methods.addTransaction = async function(transactionData) {
-    this.transactions.push(transactionData);
-    this.lastUpdated = Date.now();
-    
-    if (transactionData.status === 'COMPLETED') {
-        if (transactionData.type === 'CREDIT') {
-            this.balance += transactionData.amount;
-        } else if (transactionData.type === 'DEBIT') {
-            if (this.balance < transactionData.amount) {
-                throw new Error('Insufficient balance');
-            }
-            this.balance -= transactionData.amount;
+    try {
+        // Validate transaction data
+        if (!transactionData.type || !transactionData.amount || !transactionData.description || !transactionData.reference) {
+            throw new Error('Missing required transaction fields');
         }
+
+        // Validate transaction type
+        if (!['CREDIT', 'DEBIT'].includes(transactionData.type)) {
+            throw new Error('Invalid transaction type');
+        }
+
+        // Validate amount
+        if (isNaN(transactionData.amount) || transactionData.amount <= 0) {
+            throw new Error('Invalid transaction amount');
+        }
+
+        // Add transaction
+        this.transactions.push({
+            ...transactionData,
+            createdAt: new Date()
+        });
+        this.lastUpdated = new Date();
+        
+        // Update balance if transaction is completed
+        if (transactionData.status === 'COMPLETED') {
+            if (transactionData.type === 'CREDIT') {
+                this.balance += Number(transactionData.amount);
+            } else if (transactionData.type === 'DEBIT') {
+                if (this.balance < Number(transactionData.amount)) {
+                    throw new Error('Insufficient balance');
+                }
+                this.balance -= Number(transactionData.amount);
+            }
+        }
+        
+        // Save the wallet
+        await this.save();
+        return this;
+    } catch (error) {
+        console.error('Error in addTransaction:', error);
+        throw error;
     }
-    
-    return this.save();
 };
 
 // Method to update transaction status

@@ -117,62 +117,100 @@ exports.getWalletDetails = async (req, res) => {
     }
 };
 
-// Add funds to wallet (for MCP)
+// Add funds to wallet
 exports.addFunds = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+  try {
+    console.log('Add funds request received:', {
+      body: req.body,
+      user: req.user
+    });
 
-    try {
-        const { amount, paymentMethod, paymentDetails } = req.body;
+    const { amount, paymentMethod } = req.body;
+    const userId = req.user.userId;
 
-        // Validate user is MCP
-        const user = await User.findById(req.user.userId);
-        if (user.role !== 'MCP') {
-            throw new Error('Only MCPs can add funds directly');
-        }
-
-        const wallet = await Wallet.findOne({ userId: req.user.userId });
-        if (!wallet) {
-            throw new Error('Wallet not found');
-        }
-
-        // Create transaction record
-        const transactionData = {
-            type: 'CREDIT',
-            amount,
-            description: 'Funds added to wallet',
-            reference: `ADD-${Date.now()}`,
-            status: 'COMPLETED',
-            metadata: {
-                paymentMethod,
-                ...paymentDetails
-            }
-        };
-
-        await wallet.addTransaction(transactionData);
-
-        await session.commitTransaction();
-        session.endSession();
-
-        res.json({
-            success: true,
-            message: 'Funds added successfully',
-            data: {
-                balance: wallet.balance,
-                transaction: wallet.transactions[wallet.transactions.length - 1]
-            }
-        });
-    } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-
-        console.error('Add funds error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error adding funds',
-            error: error.message
-        });
+    // Validate request data
+    if (!userId) {
+      console.error('No user ID found in request');
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
     }
+
+    // Validate amount
+    if (!amount || isNaN(amount) || amount <= 0) {
+      console.error('Invalid amount:', amount);
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid amount'
+      });
+    }
+
+    // Validate payment method
+    if (!paymentMethod) {
+      console.error('Payment method missing');
+      return res.status(400).json({
+        success: false,
+        message: 'Payment method is required'
+      });
+    }
+
+    // Find user's wallet
+    let wallet = await Wallet.findOne({ userId });
+    console.log('Found wallet:', wallet ? 'Yes' : 'No');
+    
+    if (!wallet) {
+      console.log('Creating new wallet for user:', userId);
+      // Create new wallet if it doesn't exist
+      wallet = new Wallet({
+        userId,
+        balance: 0,
+        transactions: []
+      });
+    }
+
+    // Create transaction record
+    const transaction = {
+      type: 'CREDIT',
+      amount: Number(amount),
+      description: `Added funds via ${paymentMethod}`,
+      reference: `ADD-${Date.now()}`,
+      status: 'COMPLETED',
+      metadata: {
+        paymentMethod
+      }
+    };
+
+    console.log('Adding transaction:', transaction);
+    
+    try {
+      await wallet.addTransaction(transaction);
+      console.log('Transaction added successfully');
+    } catch (error) {
+      console.error('Error adding transaction:', error);
+      throw error;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Funds added successfully',
+      data: {
+        balance: wallet.balance,
+        transaction
+      }
+    });
+  } catch (error) {
+    console.error('Add funds error:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({
+      success: false,
+      message: 'Failed to add funds',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 };
 
 // Transfer funds to pickup partner
@@ -259,117 +297,93 @@ exports.transferFunds = async (req, res) => {
     }
 };
 
+// Withdraw funds from wallet
+exports.withdrawFunds = async (req, res) => {
+  try {
+    const { amount, bankDetails } = req.body;
+    const userId = req.user.id;
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ message: 'Invalid amount' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (user.walletBalance < amount) {
+      return res.status(400).json({ message: 'Insufficient balance' });
+    }
+
+    // Create transaction record
+    const transaction = new Transaction({
+      userId,
+      amount,
+      type: 'debit',
+      reason: 'Withdrawal request',
+      balanceAfter: user.walletBalance - amount,
+      status: 'pending',
+      metadata: { bankDetails }
+    });
+
+    // Update wallet balance
+    user.walletBalance -= amount;
+    await user.save();
+    await transaction.save();
+
+    res.status(200).json({
+      message: 'Withdrawal request submitted successfully',
+      balance: user.walletBalance,
+      transaction
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Error processing withdrawal', error: err.message });
+  }
+};
+
 // Get transaction history with filters
 exports.getTransactionHistory = async (req, res) => {
-    try {
-        const { startDate, endDate, type, status, page = 1, limit = 10 } = req.query;
-        const skip = (page - 1) * limit;
+  try {
+    const { startDate, endDate, type, status, page = 1, limit = 10 } = req.query;
+    const userId = req.user.id;
 
-        const wallet = await Wallet.findOne({ userId: req.user.userId });
-        if (!wallet) {
-            return res.status(404).json({
-                success: false,
-                message: 'Wallet not found'
-            });
-        }
+    let filter = { userId };
 
-        // Apply filters
-        let transactions = wallet.transactions;
-
-        if (startDate && endDate) {
-            transactions = transactions.filter(t => 
-                t.createdAt >= new Date(startDate) && 
-                t.createdAt <= new Date(endDate)
-            );
-        }
-
-        if (type) {
-            transactions = transactions.filter(t => t.type === type);
-        }
-
-        if (status) {
-            transactions = transactions.filter(t => t.status === status);
-        }
-
-        // Sort by date descending
-        transactions.sort((a, b) => b.createdAt - a.createdAt);
-
-        // Paginate results
-        const totalTransactions = transactions.length;
-        transactions = transactions.slice(skip, skip + limit);
-
-        res.json({
-            success: true,
-            data: {
-                transactions,
-                pagination: {
-                    total: totalTransactions,
-                    page: parseInt(page),
-                    totalPages: Math.ceil(totalTransactions / limit)
-                }
-            }
-        });
-    } catch (error) {
-        console.error('Get transaction history error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error fetching transaction history',
-            error: error.message
-        });
+    if (startDate && endDate) {
+      filter.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
     }
+
+    if (type) {
+      filter.type = type;
+    }
+
+    if (status) {
+      filter.status = status;
+    }
+
+    const skip = (page - 1) * limit;
+
+    const transactions = await Transaction.find(filter)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    const total = await Transaction.countDocuments(filter);
+
+    res.status(200).json({
+      transactions,
+      pagination: {
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Error fetching transaction history', error: err.message });
+  }
 };
 
-// Withdraw funds (for pickup partners)
-exports.withdrawFunds = async (req, res) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
-    try {
-        const { amount, bankDetails } = req.body;
-
-        const wallet = await Wallet.findOne({ userId: req.user.userId });
-        if (!wallet) {
-            throw new Error('Wallet not found');
-        }
-
-        if (wallet.balance < amount) {
-            throw new Error('Insufficient balance');
-        }
-
-        // Create withdrawal transaction
-        const transactionData = {
-            type: 'DEBIT',
-            amount,
-            description: 'Withdrawal request',
-            reference: `WTH-${Date.now()}`,
-            status: 'PENDING',
-            metadata: {
-                bankDetails
-            }
-        };
-
-        await wallet.addTransaction(transactionData);
-
-        await session.commitTransaction();
-        session.endSession();
-
-        res.json({
-            success: true,
-            message: 'Withdrawal request submitted successfully',
-            data: {
-                balance: wallet.balance,
-                transaction: wallet.transactions[wallet.transactions.length - 1]
-            }
-        });
-    } catch (error) {
-        await session.abortTransaction();
-        session.endSession();
-
-        console.error('Withdraw funds error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Error processing withdrawal',
-            error: error.message
-        });
-    }
-};

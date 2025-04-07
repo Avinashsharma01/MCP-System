@@ -8,6 +8,7 @@ import Button from '../components/Button';
 import { toast } from 'react-hot-toast';
 
 const Partners = () => {
+  
   const { user, refreshTokenIfNeeded } = useAuth();
   const [partners, setPartners] = useState([]);
   const [isLoading, setIsLoading] = useState(true);

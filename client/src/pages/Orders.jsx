@@ -118,7 +118,7 @@ const Orders = () => {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
-                className="appearance-none bg-white bg-opacity-20 text-white rounded-md pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50"
+                className="appearance-none bg-white bg-opacity-20 text-black rounded-md pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-white focus:ring-opacity-50 "
               >
                 <option value="ALL">All Orders</option>
                 <option value="PENDING">Pending</option>
