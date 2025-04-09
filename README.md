@@ -67,7 +67,7 @@ server/
 2. **Set up environment variables**:
    Create a `.env` file in the root directory with the following variables:
    ```
-   PORT=5000
+   PORT=4000 
    MONGO_URI=mongodb://localhost:27017/mcp-system
    JWT_SECRET=your_jwt_secret
    ```
